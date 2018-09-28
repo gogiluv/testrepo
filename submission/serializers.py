@@ -49,3 +49,18 @@ class SubmissionListSerializer(serializers.ModelSerializer):
         if self.user is None or not self.user.is_authenticated():
             return False
         return obj.check_user_permission(self.user)
+
+class SubmissionByUserSerializer(serializers.ModelSerializer):
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+
+    class Meta:
+        model = Submission
+
+    def get_show_link(self, obj):
+        # 没传user或为匿名user
+        if self.user is None or not self.user.is_authenticated():
+            return False
+        return obj.check_user_permission(self.user)
