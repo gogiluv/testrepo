@@ -15,6 +15,10 @@ from ..models import Submission
 from ..serializers import (CreateSubmissionSerializer, SubmissionModelSerializer,
                            ShareSubmissionSerializer)
 from ..serializers import SubmissionSafeModelSerializer, SubmissionListSerializer, SubmissionByUserSerializer
+from django.db.models.functions import TruncDate
+from django.core import serializers
+from django.core.serializers.json import DjangoJSONEncoder
+import json
 
 
 # new code for template START 18.9.20
@@ -222,7 +226,7 @@ class SubmissionAPI(APIView):
         submission, created = Submission.objects.update_or_create(user_id=request.user.id, problem_id=problem.id, defaults=values)
         """
 
-        submaission = Submission.objects.create(user_id=request.user.id,
+        submission = Submission.objects.create(user_id=request.user.id,
                                                username=request.user.username,
                                                language=data["language"],
                                                code=data["code"],
@@ -359,12 +363,14 @@ class SubmissionExistsAPI(APIView):
                             Submission.objects.filter(problem_id=request.GET["problem_id"],
                                                       user_id=request.user.id).exists())
 
-class SubmissionByUserAPI(APIView):
+class SubmissionFromUserAPI(APIView):
     def get(self, request):
         if not request.GET.get("userId"):
             return self.error("no userId")
 
-        submissions = Submission.objects.filter(contest_id__isnull=True).select_related("problem__created_by")
+        submissions = Submission.objects.filter(contest_id__isnull=True).select_related("problem__created_by")\
+                    .annotate(create_date=TruncDate('create_time')).order_by('-create_date', '-problem_id', '-language', '-create_time')\
+                    .distinct('create_date', 'problem_id', 'language')
         u_id = request.GET.get("userId")
         submissions = submissions.filter(user_id=u_id)
         data = self.paginate_data(request, submissions)
@@ -372,3 +378,39 @@ class SubmissionByUserAPI(APIView):
 
         return self.success(data)
 
+class SubmissionDateFromUserAPI(APIView):
+    def get(self, request):
+        if not request.GET.get("userId"):
+            return self.error("no userId")
+
+        submissions = Submission.objects.filter(contest_id__isnull=True).select_related("problem__created_by")\
+                    .annotate(create_date=TruncDate('create_time')).order_by('-create_date').distinct('create_date')
+
+        u_id = request.GET.get("userId")
+
+        submissions = submissions.filter(user_id=u_id)
+        #data = serializers.serialize('json', submissions)
+        data = {}
+        data['results'] = json.dumps([dict(item) for item in submissions.values('create_date')], cls=DjangoJSONEncoder)
+        return self.success(data)
+
+class SubmissionFromDateAPI(APIView):
+    def get(self, request):
+
+        if not request.GET.get("date"):
+            return self.error("no date")
+
+        if not request.GET.get("userId"):
+            return self.error("no userId")
+
+        submissions = Submission.objects.filter(contest_id__isnull=True).select_related("problem__created_by")\
+                    .annotate(create_date=TruncDate('create_time')).order_by('-create_date').distinct('create_date', 'problem_id')
+
+        u_id = request.GET.get("userId")
+        date = request.GET.get("date")
+
+        submissions = submissions.filter(create_date=date, user_id=u_id)
+        #data = serializers.serialize('json', submissions)
+        data = {}
+        data['results'] = json.dumps([dict(item) for item in submissions.values()], cls=DjangoJSONEncoder)
+        return self.success(data)
