@@ -21,7 +21,37 @@ from django.core.serializers.json import DjangoJSONEncoder
 import json
 
 
-# new code for template START 18.10.04
+# new code for template START 18.9.20
+def hidden_template_parser(template_str):
+    lines = template_str.split("\n")
+    lines = [line.replace(" ","") for line in lines if line!=""]
+    labels = {}
+    labels_flag = False
+
+    category_name = ""
+
+    for line in lines:
+        if line == '/*' or line == '*/':
+            continue
+
+        if "//PREPENDEND" in line:
+            labels_flag = False
+
+        if labels_flag == True:
+            if "[" in line:
+                category_name = line[1:-1]
+                if category_name not in labels:
+                    labels[category_name] = {}
+            else:
+                problem_num = line.split('.')[0]
+                label = line.split('.')[1].split('/')[0]
+                assigned_score = line.split('/')[1][:-1]
+                labels[category_name][problem_num] = [label.upper(), int(assigned_score)]
+
+        if "//PREPENDBEGIN" in line:
+            labels_flag = True
+   
+    return labels
 def hidden_template_parser(template_str):
     lines = template_str.split("\n")
     lines = [line.replace(" ","") for line in lines if line!=""] # remove space
@@ -60,7 +90,7 @@ def hidden_template_parser(template_str):
 def pred_parser(code):
     
     lines = code.split("\n")
-    lines = [line.replace(" ","") for line in lines if line!=""]  # remove space
+    lines = [line.replace(" ","") for line in lines if line!=""] 
     
     preds = {}
     for line in lines:
@@ -75,6 +105,7 @@ def pred_parser(code):
     return preds
 
 def get_evals_json(preds, labels):
+
     _evals = {}
     sum_score = 0
     total_score = 0
@@ -86,13 +117,14 @@ def get_evals_json(preds, labels):
         if category_name not in _evals:
             _evals[category_name] = {}
 
-        if category_name not in preds:  # if there is no answer, all scores are 0
-            for problem_num, _ in problem_info_labels.items():
+
+        if category_name not in preds: # if there is no answer, all scores are 0
+            for problem_num, _ in problem_info_labels.items(): 
                 _evals[category_name][problem_num] = 0
                 _evals[category_name]["category_sum_score"] = 0
             continue
 
-        for problem_num, _ in problem_info_labels.items():
+        for problem_num, _ in problem_info_labels.items(): 
             labels_problem = labels[category_name][problem_num][0]
             labels_assigned_score = labels[category_name][problem_num][1]
             category_total_score += labels_assigned_score
@@ -103,59 +135,29 @@ def get_evals_json(preds, labels):
 
             preds_problem = preds[category_name][problem_num][0]
 
-            multi_labels_problem = labels_problem.upper().split(',')
-            multi_preds_problem = preds_problem.upper().split(',')
-
-            if category_name == "SubjectiveTest":  # subjective test case
-                if preds_problem.upper() in multi_labels_problem:
-                    _evals[category_name][problem_num] = labels_assigned_score
-                    category_eval_score += labels_assigned_score
-                else:
-                    _evals[category_name][problem_num] = 0
-                    _evals[category_name]["category_sum_score"] = category_eval_score
-
-            elif len(multi_labels_problem) > 1:  # mutliple answer case
-                partial_score = 0
-                minus_score = -1
-                unit_score = labels_assigned_score / len(multi_labels_problem)
-
-                for labels_problem in multi_labels_problem:
-                    partial_score += multi_preds_problem.count(labels_problem) * unit_score
-
-                wrong_answer = [preds for preds in multi_preds_problem if preds not in multi_labels_problem]
-                partial_score += len(wrong_answer) * minus_score
-                if partial_score < 0:
-                    partial_score = 0
-
-                _evals[category_name][problem_num] = partial_score
+            if labels_problem.upper() == preds_problem.upper():
+                _evals[category_name][problem_num] = labels_assigned_score
                 category_eval_score += labels_assigned_score
 
-            else:  # single answer case
-
-                if labels_problem.upper() == preds_problem.upper():
-                    _evals[category_name][problem_num] = labels_assigned_score
-                    category_eval_score += labels_assigned_score
-
-                else:
-                    _evals[category_name][problem_num] = 0
-                    # category_eval_score += 0
-                    _evals[category_name]["category_sum_score"] = category_eval_score
+            else:
+                _evals[category_name][problem_num] = 0
+                # category_eval_score += 0
+                _evals[category_name]["category_sum_score"] = category_eval_score
 
         _evals[category_name]["category_total_score"] = category_total_score
         _evals[category_name]["category_sum_score"] = category_eval_score
         sum_score += category_eval_score
         total_score += category_total_score
-
+        
     _evals["sum_score"] = sum_score
     _evals["total_score"] = total_score
-
-    evals = {}
+    
+    evals = {}    
     evals["evals"] = _evals
     evals["preds"] = preds
     evals["labels"] = labels
     return evals
-
-# new code for template END 18.10.04
+# new code for template END 18.9.20
 
 
 class SubmissionAPI_compile(APIView):
